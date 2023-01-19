@@ -8,4 +8,7 @@ These scripts help me understand a little bit more about the cyrpto world
 <pre>
 > Get a real time overview of popular crypto prices
 $ ./get-cryptoprice.sh
+
+Check the cert is valid on popular crypto exchanges
+$ ./check-exchange-cert.sh
 </pre>
