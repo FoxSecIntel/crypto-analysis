@@ -11,4 +11,7 @@ $ ./get-cryptoprice.sh
 
 Check the cert is valid on popular crypto exchanges
 $ ./check-exchange-cert.sh
+
+Check the IP of the exchange is not malicious
+$ ./check-exchange-ip.sh
 </pre>
