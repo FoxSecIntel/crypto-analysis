@@ -6,7 +6,7 @@ As I am learning about the cyber security impact of crypto, It's important to un
 
 These scripts help me understand a little bit more about the cyrpto world
 <pre>
-> Get a real time overview of popular crypto prices
+Get a real time overview of popular crypto prices
 $ ./get-cryptoprice.sh
 
 Check the cert is valid on popular crypto exchanges
