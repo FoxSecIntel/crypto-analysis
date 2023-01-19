@@ -15,3 +15,6 @@ $ ./check-exchange-cert.sh
 Check the IP of the exchange is not malicious
 $ ./check-exchange-ip.sh
 </pre>
+
+Check a directory/files to see if any bitcoin or ethereum addresses are in them
+$ ./check-files-crypto.sh
