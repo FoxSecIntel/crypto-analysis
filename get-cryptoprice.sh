@@ -1,40 +1,54 @@
 #!/bin/bash
+set -euo pipefail
 
-# Set CoinGecko API endpoint
 API_ENDPOINT="https://api.coingecko.com/api/v3/simple/price"
-
-# Set currency symbol
 CURRENCY="eur"
-
-# Set crypto currency symbols
 CRYPTO_CURRENCIES=("bitcoin" "ethereum-name-service" "avalanche-2" "cosmos" "polkadot" "dogecoin" "shiba-inu" "usd-coin")
+declare -A alert_thresholds=( ["bitcoin"]=20000 ["ethereum-name-service"]=15 ["avalanche-2"]=20 ["cosmos"]=4 ["polkadot"]=4 ["dogecoin"]=0.2 ["shiba-inu"]=0.00004 ["usd-coin"]=1 )
 
-# Set alert thresholds for each coin
-declare -A alert_thresholds=( ["bitcoin"]=20000 ["ethereum-name-service"]=15 ["avalanche-2"]=20 ["cosmos"]=4 ["polkadot"]=4 ["dogecoin"]=0.2 ["shiba-inu"]=0.00004 ["usd-coin"]=1)
+CACHE_FILE="/tmp/get-cryptoprice-cache.json"
+MAX_CACHE_AGE=300
 
-# Iterate over crypto currency symbols
-for symbol in "${CRYPTO_CURRENCIES[@]}"
-do
-  # Get live price
-  response=$(curl -s "$API_ENDPOINT?ids=$symbol&vs_currencies=$CURRENCY")
+ids=$(IFS=,; echo "${CRYPTO_CURRENCIES[*]}")
+url="$API_ENDPOINT?ids=$ids&vs_currencies=$CURRENCY"
 
-  # Use jq to extract the price, with proper handling for keys with special characters
-  price=$(echo "$response" | jq -r ".[\"$symbol\"].$CURRENCY")
+fetch_response() {
+  curl -sS --max-time 10 --retry 2 --retry-delay 1 "$url"
+}
 
-  # Debugging output
-  #echo "Response: $response"
-  #echo "Price: $price"
+response="$(fetch_response 2>/dev/null || true)"
+error_code="$(echo "$response" | jq -r '.status.error_code // empty' 2>/dev/null)"
 
-  # Check if the price is a valid number
-  if [[ $price != null && $price =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
-    # Print live price
-    echo -n "$symbol price: $price $CURRENCY"
-
-    # Check if price exceeds alert threshold for this coin
-    if (( $(echo "$price > ${alert_thresholds[$symbol]}" | bc -l) )); then
-      printf " \033[1;32mALERT: $symbol price is above ${alert_thresholds[$symbol]} $CURRENCY\033[0m\n"
+if [[ -z "$response" || "$error_code" == "429" ]]; then
+  if [[ -f "$CACHE_FILE" ]]; then
+    now=$(date +%s)
+    mtime=$(stat -c %Y "$CACHE_FILE" 2>/dev/null || echo 0)
+    age=$((now - mtime))
+    if (( age <= MAX_CACHE_AGE )); then
+      response="$(cat "$CACHE_FILE")"
+      echo "[!] CoinGecko rate-limited/unavailable, using cached prices (${age}s old)."
     else
-      printf " \033[1;31mALERT: $symbol price is below ${alert_thresholds[$symbol]} $CURRENCY\033[0m\n"
+      echo "[!] CoinGecko rate-limited/unavailable and cache is too old (${age}s)."
+    fi
+  else
+    echo "[!] CoinGecko rate-limited/unavailable and no cache available."
+  fi
+fi
+
+if [[ -n "$response" ]]; then
+  if [[ -z "$(echo "$response" | jq -r '.status.error_code // empty' 2>/dev/null)" ]]; then
+    echo "$response" > "$CACHE_FILE" || true
+  fi
+fi
+
+for symbol in "${CRYPTO_CURRENCIES[@]}"; do
+  price=$(echo "$response" | jq -r ".[\"$symbol\"].$CURRENCY" 2>/dev/null)
+  if [[ "$price" != "null" && "$price" =~ ^[0-9]+([.][0-9]+)?([eE][-+]?[0-9]+)?$ ]]; then
+    echo -n "$symbol price: $price $CURRENCY"
+    if awk -v p="$price" -v t="${alert_thresholds[$symbol]}" 'BEGIN{exit !(p>t)}'; then
+      printf " \033[1;32mALERT: %s price is above %s %s\033[0m\n" "$symbol" "${alert_thresholds[$symbol]}" "$CURRENCY"
+    else
+      printf " \033[1;31mALERT: %s price is below %s %s\033[0m\n" "$symbol" "${alert_thresholds[$symbol]}" "$CURRENCY"
     fi
   else
     echo "$symbol price: Data not available"
