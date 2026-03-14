@@ -29,3 +29,12 @@ jobs:
           if [ -n "$sh_files" ]; then
             for f in $sh_files; do bash -n "$f"; done
           fi
+
+      - name: Repository hygiene check
+        run: |
+          bad=$(git ls-files | grep -E '(^|/)__pycache__/|\.pyc$|\.pyo$|\.DS_Store$|(^|/)\.venv/' || true)
+          if [ -n "$bad" ]; then
+            echo "Tracked junk files found:"
+            echo "$bad"
+            exit 1
+          fi
